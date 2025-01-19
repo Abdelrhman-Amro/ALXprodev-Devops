@@ -1,0 +1,44 @@
+#!/bin/bash
+
+# List of Pokémon
+POKEMON_LIST=("bulbasaur" "ivysaur" "venusaur" "charmander" "charmeleon")
+
+# API endpoint
+BASE_URL="https://pokeapi.co/api/v2/pokemon/"
+
+# Error file
+ERROR_FILE="errors.txt"
+
+# Maximum number of concurrent processes
+MAX_PARALLEL=3
+
+# Function to fetch data for a Pokémon
+fetch_pokemon_data() {
+    local POKEMON=$1
+    local OUTPUT_FILE="${POKEMON}.json"
+
+    echo "Fetching data for $POKEMON..."
+    HTTP_CODE=$(curl -s -o "$OUTPUT_FILE" -w "%{http_code}" "${BASE_URL}${POKEMON}")
+
+    if [ "$HTTP_CODE" -eq 200 ]; then
+        echo "Data for $POKEMON saved to $OUTPUT_FILE."
+    else
+        echo "Failed to fetch data for $POKEMON. HTTP Status: $HTTP_CODE" | tee -a "$ERROR_FILE"
+        rm -f "$OUTPUT_FILE"  # Remove incomplete file
+    fi
+}
+
+# Export the function for use by subprocesses
+export -f fetch_pokemon_data
+
+# Export necessary variables
+export BASE_URL
+export ERROR_FILE
+
+# Use xargs to manage parallel processing
+echo "${POKEMON_LIST[@]}" | tr ' ' '\n' | xargs -P $MAX_PARALLEL -I {} bash -c 'fetch_pokemon_data "$@"' _ {}
+
+# Wait for all processes to finish
+wait
+
+echo "All Pokémon data fetched."

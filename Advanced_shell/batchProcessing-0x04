@@ -28,17 +28,27 @@ fetch_pokemon_data() {
     fi
 }
 
-# Export the function for use by subprocesses
-export -f fetch_pokemon_data
+# Start background processes for each Pokémon
+PIDS=()  # Array to store process IDs
 
-# Export necessary variables
-export BASE_URL
-export ERROR_FILE
+for POKEMON in "${POKEMON_LIST[@]}"; do
+    # Start a new fetch in the background
+    fetch_pokemon_data "$POKEMON" &
 
-# Use xargs to manage parallel processing
-echo "${POKEMON_LIST[@]}" | tr ' ' '\n' | xargs -P $MAX_PARALLEL -I {} bash -c 'fetch_pokemon_data "$@"' _ {}
+    # Get the PID of the background process and store it
+    PIDS+=($!)
 
-# Wait for all processes to finish
-wait
+    # Limit parallel jobs to MAX_PARALLEL
+    while (( $(jobs -r | wc -l) >= MAX_PARALLEL )); do
+        sleep 1  # Wait for a job to finish
+    done
+done
+
+# Wait for all background processes to complete
+for PID in "${PIDS[@]}"; do
+    if kill -0 "$PID" 2>/dev/null; then
+        wait "$PID"  # Wait for the process to finish
+    fi
+done
 
 echo "All Pokémon data fetched."

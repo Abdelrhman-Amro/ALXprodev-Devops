@@ -3,47 +3,41 @@
 # Output CSV file
 OUTPUT_FILE="pokemon_summary.csv"
 
-# Temporary file for calculations
-TEMP_FILE="temp_data.txt"
-
-# Check if any JSON files are present
+# Check if JSON files exist
 if ! ls *.json 1> /dev/null 2>&1; then
     echo "No JSON files found. Make sure to run the batch retrieval script first."
     exit 1
 fi
 
-# Write the header of the CSV file
+# Write the CSV header
 echo "Name,Height (m),Weight (kg)" > "$OUTPUT_FILE"
+
+# Initialize variables for averaging
+TOTAL_HEIGHT=0
+TOTAL_WEIGHT=0
+COUNT=0
 
 # Process each JSON file
 for FILE in *.json; do
     # Extract name, height, and weight
-    NAME=$(jq -r '.name' "$FILE")
-    HEIGHT=$(jq -r '.height' "$FILE" | awk '{print $1 / 10}') # Convert decimeters to meters
-    WEIGHT=$(jq -r '.weight' "$FILE" | awk '{print $1 / 10}') # Convert hectograms to kilograms
+    DATA=$(jq -r '[.name, (.height / 10), (.weight / 10)] | @csv' "$FILE")
+    echo "$DATA" >> "$OUTPUT_FILE"
 
-    # Append the extracted data to the CSV file
-    echo "$NAME,$HEIGHT,$WEIGHT" >> "$OUTPUT_FILE"
+    # Extract numerical values for height and weight using sed
+    HEIGHT=$(echo "$DATA" | sed -E 's/[^,]*,([^,]*),.*/\1/')
+    WEIGHT=$(echo "$DATA" | sed -E 's/[^,]*,[^,]*,(.*)/\1/')
 
-    # Append the height and weight to the temporary file for averaging
-    echo "$HEIGHT $WEIGHT" >> "$TEMP_FILE"
+    # Accumulate totals
+    TOTAL_HEIGHT=$(echo "$TOTAL_HEIGHT + $HEIGHT" | bc)
+    TOTAL_WEIGHT=$(echo "$TOTAL_WEIGHT + $WEIGHT" | bc)
+    COUNT=$((COUNT + 1))
 done
 
-# Calculate average height and weight using awk
-awk '
-BEGIN { total_height = 0; total_weight = 0; count = 0; }
-{
-    total_height += $1;
-    total_weight += $2;
-    count++;
-}
-END {
-    printf "\nAverage Height (m): %.2f\nAverage Weight (kg): %.2f\n", total_height / count, total_weight / count;
-}
-' "$TEMP_FILE"
-
-# Clean up temporary file
-rm -f "$TEMP_FILE"
+# Calculate and display averages
+AVG_HEIGHT=$(echo "scale=2; $TOTAL_HEIGHT / $COUNT" | bc)
+AVG_WEIGHT=$(echo "scale=2; $TOTAL_WEIGHT / $COUNT" | bc)
+echo "Average Height (m): $AVG_HEIGHT"
+echo "Average Weight (kg): $AVG_WEIGHT"
 
 # Inform the user
 echo "Summary saved to $OUTPUT_FILE."
